@@ -1,0 +1,17 @@
+# ============================================
+# MarketFin Terraform Variables
+# ============================================
+# Copy this file to terraform.tfvars and fill in the values
+
+# AWS Region
+aws_region = "us-east-1"
+
+# Environment (production, staging, development)
+environment = "production"
+
+# Database password (use a strong password!)
+# Minimum 16 characters, include uppercase, lowercase, numbers, and special characters
+db_password = "CHANGE_ME_TO_A_STRONG_PASSWORD"
+
+# Domain name for the application
+domain_name = "marketfin.com.br"

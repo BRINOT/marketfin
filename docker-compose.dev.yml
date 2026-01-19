@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: marketfin-postgres
+    environment:
+      POSTGRES_DB: marketfin
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dev -d marketfin']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketfin-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.dev
+    container_name: marketfin-backend
+    ports:
+      - '3001:3001'
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgres://dev:dev@postgres:5432/marketfin
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FRONTEND_URL: http://localhost:3000
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      MERCADO_LIVRE_CLIENT_ID: ${MERCADO_LIVRE_CLIENT_ID}
+      MERCADO_LIVRE_CLIENT_SECRET: ${MERCADO_LIVRE_CLIENT_SECRET}
+      MERCADO_LIVRE_REDIRECT_URI: http://localhost:3001/api/oauth/mercado-livre/callback
+      AMAZON_CLIENT_ID: ${AMAZON_CLIENT_ID}
+      AMAZON_CLIENT_SECRET: ${AMAZON_CLIENT_SECRET}
+      SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID}
+      SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY}
+    volumes:
+      - ./apps/backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile.dev
+    container_name: marketfin-frontend
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_GRAPHQL_URL: http://localhost:3001/graphql
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: marketfin-network

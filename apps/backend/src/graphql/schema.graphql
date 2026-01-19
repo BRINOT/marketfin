@@ -1,0 +1,469 @@
+# Enums
+enum Marketplace {
+  AMAZON
+  MERCADO_LIVRE
+  SHOPEE
+  MAGALU
+  AMERICANAS
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  REFUNDED
+  CANCELLED
+}
+
+enum ExpenseType {
+  ADS
+  FREIGHT
+  PRODUCT_COST
+  STORAGE
+  OTHER
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum GroupBy {
+  DAY
+  WEEK
+  MONTH
+  MARKETPLACE
+  PRODUCT
+}
+
+# Scalar types
+scalar DateTime
+scalar JSON
+
+# Types
+type Tenant {
+  id: ID!
+  name: String!
+  plan: Plan!
+  createdAt: DateTime!
+}
+
+type User {
+  id: ID!
+  email: String!
+  role: UserRole!
+  tenantId: String!
+  clerkUserId: String!
+  createdAt: DateTime
+}
+
+type Integration {
+  id: ID!
+  tenantId: String!
+  marketplace: Marketplace!
+  status: IntegrationStatus!
+  lastSyncAt: DateTime
+  settings: JSON
+}
+
+type Product {
+  id: ID!
+  tenantId: String!
+  sku: String!
+  name: String!
+  costPrice: Float!
+  salePrice: Float!
+  stock: Int!
+  margin: Float
+  marketplaceProducts: [MarketplaceProduct!]
+}
+
+type MarketplaceProduct {
+  id: ID!
+  productId: String!
+  marketplace: Marketplace!
+  externalId: String!
+  listingUrl: String
+}
+
+type Order {
+  id: ID!
+  tenantId: String!
+  marketplace: Marketplace!
+  marketplaceOrderId: String!
+  status: OrderStatus!
+  orderDate: DateTime!
+  totalAmount: Float!
+  fees: Float!
+  shippingCost: Float!
+  taxes: Float!
+  netProfit: Float!
+  customerName: String
+  items: [OrderItem!]
+  refunds: [Refund!]
+}
+
+type OrderItem {
+  id: ID!
+  orderId: String!
+  productId: String!
+  product: Product
+  quantity: Int!
+  unitPrice: Float!
+}
+
+type Refund {
+  id: ID!
+  orderId: String!
+  refundDate: DateTime!
+  amount: Float!
+  reason: String
+}
+
+type Expense {
+  id: ID!
+  tenantId: String!
+  type: ExpenseType!
+  amount: Float!
+  date: DateTime!
+  description: String
+  marketplace: Marketplace
+}
+
+# Auth types
+type AuthUrl {
+  authUrl: String!
+}
+
+type SyncResult {
+  success: Boolean!
+  ordersImported: Int!
+  errors: [String!]
+}
+
+# Report types
+type ProfitReport {
+  totalRevenue: Float!
+  totalFees: Float!
+  totalShipping: Float!
+  totalTaxes: Float!
+  totalCost: Float!
+  netProfit: Float!
+  margin: Float!
+  items: [ProfitReportItem!]!
+}
+
+type ProfitReportItem {
+  label: String!
+  revenue: Float!
+  fees: Float!
+  shipping: Float!
+  taxes: Float!
+  cost: Float!
+  profit: Float!
+  margin: Float!
+  orderCount: Int!
+}
+
+type DashboardStats {
+  totalRevenue: Float!
+  totalProfit: Float!
+  totalOrders: Int!
+  averageTicket: Float!
+  profitMargin: Float!
+  revenueByMarketplace: [MarketplaceRevenue!]!
+  recentOrders: [Order!]!
+}
+
+type MarketplaceRevenue {
+  marketplace: Marketplace!
+  revenue: Float!
+  profit: Float!
+  orderCount: Int!
+  percentage: Float!
+}
+
+# Expense types
+type ExpenseList {
+  items: [Expense!]!
+  total: Int!
+  totalAmount: Float!
+}
+
+type ExpenseStats {
+  totalExpenses: Float!
+  byType: [ExpenseByType!]!
+  byMonth: [ExpenseByMonth!]!
+}
+
+type ExpenseByType {
+  type: ExpenseType!
+  amount: Float!
+  percentage: Float!
+}
+
+type ExpenseByMonth {
+  month: String!
+  amount: Float!
+}
+
+# Product types
+type ProductList {
+  items: [Product!]!
+  total: Int!
+}
+
+type ProductStats {
+  totalProducts: Int!
+  totalStockValue: Float!
+  lowStockCount: Int!
+  averageMargin: Float!
+}
+
+# Order types
+type OrderList {
+  items: [Order!]!
+  total: Int!
+}
+
+type OrderStats {
+  totalOrders: Int!
+  totalRevenue: Float!
+  totalProfit: Float!
+  averageTicket: Float!
+}
+
+# Subscription types
+type Subscription {
+  plan: Plan!
+  status: String!
+  currentPeriodEnd: DateTime
+  cancelAtPeriodEnd: Boolean!
+  usage: SubscriptionUsage!
+}
+
+type SubscriptionUsage {
+  orders: Int!
+  ordersLimit: Int!
+  integrations: Int!
+  integrationsLimit: Int!
+  users: Int!
+  usersLimit: Int!
+}
+
+type Invoice {
+  id: ID!
+  date: DateTime!
+  amount: Int!
+  status: String!
+  pdfUrl: String
+}
+
+type CheckoutSession {
+  url: String!
+}
+
+type PortalSession {
+  url: String!
+}
+
+# Settings types
+type TenantSettings {
+  id: ID!
+  name: String!
+  plan: Plan!
+  taxSettings: TaxSettings!
+  notificationSettings: NotificationSettings!
+}
+
+type TaxSettings {
+  icmsRate: Float!
+  pisCofinsRate: Float!
+  issRate: Float!
+  simpleNacionalRate: Float!
+  taxRegime: String!
+}
+
+type NotificationSettings {
+  emailNotifications: Boolean!
+  lowStockAlert: Boolean!
+  lowStockThreshold: Int!
+  dailyReport: Boolean!
+  weeklyReport: Boolean!
+}
+
+# Input types
+input ProfitFilters {
+  startDate: DateTime!
+  endDate: DateTime!
+  marketplace: [Marketplace!]
+  groupBy: GroupBy!
+}
+
+input ExpenseFilters {
+  startDate: DateTime!
+  endDate: DateTime!
+  type: ExpenseType
+  marketplace: Marketplace
+  search: String
+}
+
+input ProductFilters {
+  search: String
+  lowStock: Boolean
+  page: Int
+  limit: Int
+}
+
+input OrderFilters {
+  startDate: DateTime
+  endDate: DateTime
+  status: OrderStatus
+  marketplace: Marketplace
+  search: String
+  page: Int
+  limit: Int
+}
+
+input CreateExpenseInput {
+  type: ExpenseType!
+  amount: Float!
+  date: DateTime!
+  description: String
+  marketplace: Marketplace
+}
+
+input UpdateExpenseInput {
+  type: ExpenseType
+  amount: Float
+  date: DateTime
+  description: String
+  marketplace: Marketplace
+}
+
+input CreateProductInput {
+  sku: String!
+  name: String!
+  costPrice: Float!
+  salePrice: Float!
+  stock: Int
+}
+
+input UpdateProductInput {
+  name: String
+  costPrice: Float
+  salePrice: Float
+  stock: Int
+}
+
+input InviteUserInput {
+  email: String!
+  role: UserRole!
+}
+
+input UpdateTenantInput {
+  name: String
+}
+
+input TaxSettingsInput {
+  icmsRate: Float!
+  pisCofinsRate: Float!
+  issRate: Float!
+  simpleNacionalRate: Float!
+  taxRegime: String!
+}
+
+input NotificationSettingsInput {
+  emailNotifications: Boolean!
+  lowStockAlert: Boolean!
+  lowStockThreshold: Int!
+  dailyReport: Boolean!
+  weeklyReport: Boolean!
+}
+
+# Queries
+type Query {
+  # Dashboard
+  getDashboardStats(startDate: DateTime!, endDate: DateTime!): DashboardStats!
+  
+  # Integrations
+  getIntegrations: [Integration!]!
+  getIntegrationStatus(marketplace: Marketplace!): Integration
+  
+  # Finance
+  getProfitReport(filters: ProfitFilters!): ProfitReport!
+  
+  # Products
+  getProducts(filters: ProductFilters): ProductList!
+  getProduct(id: ID!): Product
+  getProductStats: ProductStats!
+  
+  # Orders
+  getOrders(filters: OrderFilters): OrderList!
+  getOrder(id: ID!): Order
+  getOrderStats(startDate: DateTime, endDate: DateTime): OrderStats!
+  
+  # Expenses
+  getExpenses(filters: ExpenseFilters!): ExpenseList!
+  getExpense(id: ID!): Expense
+  getExpenseStats: ExpenseStats!
+  
+  # Users
+  getUsers: [User!]!
+  getUser(id: ID!): User
+  me: User
+  
+  # Tenant/Settings
+  getTenantSettings: TenantSettings!
+  
+  # Subscription
+  getSubscription: Subscription!
+  getInvoices: [Invoice!]!
+}
+
+# Mutations
+type Mutation {
+  # Integrations
+  connectMarketplace(marketplace: Marketplace!): AuthUrl!
+  disconnectMarketplace(marketplace: Marketplace!): Boolean!
+  syncOrders(marketplace: Marketplace!, startDate: DateTime!, endDate: DateTime!): SyncResult!
+  
+  # Products
+  createProduct(input: CreateProductInput!): Product!
+  updateProduct(id: ID!, input: UpdateProductInput!): Product!
+  deleteProduct(id: ID!): Boolean!
+  
+  # Expenses
+  createExpense(input: CreateExpenseInput!): Expense!
+  updateExpense(id: ID!, input: UpdateExpenseInput!): Expense!
+  deleteExpense(id: ID!): Boolean!
+  
+  # Users
+  inviteUser(input: InviteUserInput!): User!
+  updateUserRole(userId: ID!, role: UserRole!): User!
+  removeUser(userId: ID!): Boolean!
+  
+  # Tenant/Settings
+  updateTenant(input: UpdateTenantInput!): Tenant!
+  updateTaxSettings(input: TaxSettingsInput!): TaxSettings!
+  updateNotificationSettings(input: NotificationSettingsInput!): NotificationSettings!
+  
+  # Subscription
+  createCheckoutSession(plan: Plan!): CheckoutSession!
+  createPortalSession: PortalSession!
+}

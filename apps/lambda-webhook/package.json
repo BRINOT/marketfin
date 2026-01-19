@@ -1,0 +1,25 @@
+{
+  "name": "@marketfin/lambda-webhook",
+  "version": "1.0.0",
+  "description": "AWS Lambda webhook handler for MarketFin",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "serverless deploy",
+    "deploy:prod": "serverless deploy --stage prod",
+    "local": "serverless offline",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.400.0",
+    "crypto": "^1.0.1",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^20.8.0",
+    "serverless": "^3.35.0",
+    "serverless-offline": "^13.2.0",
+    "typescript": "^5.3.0"
+  }
+}

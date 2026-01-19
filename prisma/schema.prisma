@@ -1,0 +1,410 @@
+// MarketFin - Prisma Schema
+// Multi-tenant SaaS for marketplace financial control
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgcrypto]
+}
+
+// ==================== MULTI-TENANCY ====================
+
+model Tenant {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  plan         Plan          @default(FREE)
+  stripeCustomerId String?   @unique
+  stripeSubscriptionId String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  // Relations
+  users        User[]
+  integrations Integration[]
+  orders       Order[]
+  expenses     Expense[]
+  products     Product[]
+  taxSettings  TaxSettings?
+  consents     Consent[]
+  
+  @@index([slug])
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+// ==================== USERS & AUTH ====================
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  firstName   String?
+  lastName    String?
+  role        UserRole @default(VIEWER)
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clerkUserId String   @unique
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([tenantId])
+  @@index([clerkUserId])
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+// ==================== MARKETPLACE INTEGRATIONS ====================
+
+model Integration {
+  id           String            @id @default(uuid())
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketplace  Marketplace
+  status       IntegrationStatus @default(INACTIVE)
+  accessToken  String?           // Encrypted at application level
+  refreshToken String?           // Encrypted at application level
+  tokenExpiresAt DateTime?
+  sellerId     String?           // Seller ID in the marketplace
+  settings     Json?             // Marketplace-specific configuration
+  lastSyncAt   DateTime?
+  syncError    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  
+  @@unique([tenantId, marketplace])
+  @@index([tenantId])
+}
+
+enum Marketplace {
+  AMAZON
+  MERCADO_LIVRE
+  SHOPEE
+  MAGALU
+  AMERICANAS
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  SYNCING
+}
+
+// ==================== PRODUCTS ====================
+
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sku         String
+  name        String
+  description String?
+  costPrice   Decimal  @db.Decimal(10, 2)
+  salePrice   Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  weight      Decimal? @db.Decimal(10, 3) // kg
+  dimensions  Json?    // { length, width, height }
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  marketplaceProducts MarketplaceProduct[]
+  orderItems          OrderItem[]
+  
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+}
+
+model MarketplaceProduct {
+  id            String      @id @default(uuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplace   Marketplace
+  externalId    String      // ID in the marketplace
+  listingUrl    String?
+  status        String?     // active, paused, etc.
+  lastSyncAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@unique([productId, marketplace])
+  @@unique([marketplace, externalId])
+  @@index([productId])
+}
+
+// ==================== ORDERS ====================
+
+model Order {
+  id                 String      @id @default(uuid())
+  tenantId           String
+  tenant             Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  marketplace        Marketplace
+  marketplaceOrderId String      @unique
+  status             OrderStatus
+  orderDate          DateTime
+  
+  // Financial data
+  totalAmount        Decimal     @db.Decimal(10, 2)
+  subtotal           Decimal     @db.Decimal(10, 2)
+  fees               Decimal     @db.Decimal(10, 2) // Marketplace commissions
+  shippingCost       Decimal     @db.Decimal(10, 2)
+  shippingPaidByBuyer Decimal    @db.Decimal(10, 2) @default(0)
+  taxes              Decimal     @db.Decimal(10, 2) // ICMS, PIS/COFINS
+  productCost        Decimal     @db.Decimal(10, 2) // Sum of product costs
+  netProfit          Decimal     @db.Decimal(10, 2) // Calculated profit
+  profitMargin       Decimal     @db.Decimal(5, 2)  // Percentage
+  
+  // Customer data (anonymized after 30 days for LGPD)
+  customerName       String?
+  customerEmail      String?
+  shippingAddress    Json?
+  
+  // Tracking
+  trackingCode       String?
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
+  
+  // Metadata
+  rawData            Json?       // Original marketplace data
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  
+  // Relations
+  items              OrderItem[]
+  refunds            Refund[]
+  
+  @@index([tenantId, orderDate])
+  @@index([tenantId, marketplace])
+  @@index([tenantId, status])
+  @@index([marketplaceOrderId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  REFUNDED
+  CANCELLED
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  
+  // Item details
+  sku       String
+  name      String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  unitCost  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+  
+  // Marketplace specific
+  externalProductId String?
+  
+  @@index([orderId])
+  @@index([productId])
+}
+
+// ==================== REFUNDS ====================
+
+model Refund {
+  id            String       @id @default(uuid())
+  orderId       String
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  refundDate    DateTime
+  amount        Decimal      @db.Decimal(10, 2)
+  reason        String?
+  status        RefundStatus @default(PENDING)
+  marketplaceRefundId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  @@index([orderId])
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+// ==================== EXPENSES ====================
+
+model Expense {
+  id          String       @id @default(uuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        ExpenseType
+  amount      Decimal      @db.Decimal(10, 2)
+  date        DateTime
+  description String?
+  marketplace Marketplace?
+  isRecurring Boolean      @default(false)
+  recurringDay Int?        // Day of month for recurring expenses
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  @@index([tenantId, date])
+  @@index([tenantId, type])
+}
+
+enum ExpenseType {
+  ADS
+  FREIGHT
+  PRODUCT_COST
+  STORAGE
+  PACKAGING
+  SOFTWARE
+  EMPLOYEE
+  TAX
+  OTHER
+}
+
+// ==================== TAX SETTINGS ====================
+
+model TaxSettings {
+  id           String  @id @default(uuid())
+  tenantId     String  @unique
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Brazilian taxes
+  icmsRate     Decimal @db.Decimal(5, 4) @default(0.18)   // 18%
+  pisCofinsRate Decimal @db.Decimal(5, 4) @default(0.0465) // 4.65%
+  issRate      Decimal @db.Decimal(5, 4) @default(0)      // ISS for services
+  
+  // Tax regime
+  taxRegime    TaxRegime @default(SIMPLES_NACIONAL)
+  simplesRate  Decimal?  @db.Decimal(5, 4) // Simples Nacional rate
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum TaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+}
+
+// ==================== LGPD/GDPR COMPLIANCE ====================
+
+model Consent {
+  id          String      @id @default(uuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        ConsentType
+  granted     Boolean
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([tenantId])
+}
+
+enum ConsentType {
+  DATA_PROCESSING
+  MARKETING
+  ANALYTICS
+  THIRD_PARTY_SHARING
+}
+
+model DataDeletionRequest {
+  id          String                    @id @default(uuid())
+  tenantId    String
+  requestedBy String                    // User ID
+  status      DataDeletionRequestStatus @default(PENDING)
+  requestedAt DateTime                  @default(now())
+  processedAt DateTime?
+  completedAt DateTime?
+  
+  @@index([tenantId])
+  @@index([status])
+}
+
+enum DataDeletionRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ==================== SYNC & JOBS ====================
+
+model SyncJob {
+  id          String        @id @default(uuid())
+  tenantId    String
+  marketplace Marketplace
+  type        SyncJobType
+  status      SyncJobStatus @default(PENDING)
+  startDate   DateTime?
+  endDate     DateTime?
+  progress    Int           @default(0) // 0-100
+  totalItems  Int?
+  processedItems Int        @default(0)
+  errorMessage String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  
+  @@index([tenantId, marketplace])
+  @@index([status])
+}
+
+enum SyncJobType {
+  ORDERS
+  PRODUCTS
+  INVENTORY
+  FULL
+}
+
+enum SyncJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// ==================== WEBHOOKS ====================
+
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  marketplace Marketplace
+  eventType   String
+  payload     Json
+  signature   String?
+  processed   Boolean  @default(false)
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  
+  @@index([marketplace, processed])
+  @@index([createdAt])
+}

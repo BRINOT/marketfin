@@ -1,0 +1,77 @@
+service: marketfin-webhooks
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 256
+  timeout: 30
+  environment:
+    REDIS_URL: ${env:REDIS_URL}
+    SQS_QUEUE_URL: !Ref WebhookQueue
+    NODE_ENV: ${self:provider.stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !GetAtt WebhookQueue.Arn
+
+functions:
+  mercadoLivre:
+    handler: dist/handlers/mercado-livre.handler
+    events:
+      - http:
+          path: /webhooks/mercado-livre
+          method: post
+          cors: true
+
+  amazon:
+    handler: dist/handlers/amazon.handler
+    events:
+      - http:
+          path: /webhooks/amazon
+          method: post
+          cors: true
+
+  shopee:
+    handler: dist/handlers/shopee.handler
+    events:
+      - http:
+          path: /webhooks/shopee
+          method: post
+          cors: true
+
+  magalu:
+    handler: dist/handlers/magalu.handler
+    events:
+      - http:
+          path: /webhooks/magalu
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    WebhookQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: marketfin-webhooks-${self:provider.stage}
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 1209600 # 14 days
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt WebhookDLQ.Arn
+          maxReceiveCount: 3
+
+    WebhookDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: marketfin-webhooks-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+  Outputs:
+    WebhookQueueUrl:
+      Value: !Ref WebhookQueue
+    WebhookQueueArn:
+      Value: !GetAtt WebhookQueue.Arn
