@@ -4,13 +4,9 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
-  "regions": ["gru1"],
-  "env": {
-    "NEXT_PUBLIC_GRAPHQL_URL": "@graphql_url",
-    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "@clerk_publishable_key",
-    "CLERK_SECRET_KEY": "@clerk_secret_key",
-    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key"
-  },
+  "regions": [
+    "gru1"
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
@@ -70,16 +66,6 @@
       "source": "/login",
       "destination": "/sign-in",
       "permanent": true
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/sync-orders",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/cleanup-exports",
-      "schedule": "0 3 * * *"
     }
   ]
 }
